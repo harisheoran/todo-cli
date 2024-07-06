@@ -1,12 +1,22 @@
 package todo
 
 import (
+	"bufio"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
+	"strings"
 	"time"
 )
+
+type List []item
+
+type Stringer interface {
+	PrettyOutput() string
+	VerboseOutput() string
+}
 
 // item classs for task, not exposing it
 type item struct {
@@ -16,7 +26,59 @@ type item struct {
 	CompletedAt time.Time
 }
 
-type List []item
+func (list *List) VerboseOutput() string {
+	verbose := ""
+	for i, value := range *list {
+		if value.CompletedAt.Format("01-02-2006 15:04:05") == "01-01-0001 00:00:00" {
+			verbose += fmt.Sprintf("%d %s CREATED:%s COMPLETED:%s \n", i, value.Task, value.CreatedAt.Format("01-02-2006 15:04:05"), "In Progress")
+		} else {
+			verbose += fmt.Sprintf("%d %s CREATED:%s COMPLETED:%s \n", i, value.Task, value.CreatedAt.Format("01-02-2006 15:04:05"), value.CompletedAt.Format("01-02-2006 15:04:05"))
+		}
+	}
+	return verbose
+}
+
+func (list *List) PrettyOutput() string {
+	formattedOutput := ""
+
+	for i, value := range *list {
+		prefix := "  "
+		if value.Done {
+			prefix = "X "
+		}
+		formattedOutput += fmt.Sprintf("%s%d: %s\n", prefix, i, value.Task)
+	}
+
+	return formattedOutput
+}
+
+func (l *List) GetTask(r io.Reader, args ...string) ([]string, error) {
+	task := []string{}
+
+	if len(args) > 0 {
+		task = append(task, strings.Join(args, " "))
+		return task, nil
+	}
+
+	s := bufio.NewScanner(r)
+	for s.Scan() {
+		line := s.Text()
+		task = append(task, s.Text())
+		if len(line) == 0 {
+			break
+		}
+	}
+
+	if err := s.Err(); err != nil {
+		return task, err
+	}
+
+	if len(s.Text()) == 0 {
+		return task, fmt.Errorf("Task Cannot be blank")
+	}
+
+	return task, nil
+}
 
 // Add the task
 func (l *List) Add(task string) {
@@ -32,24 +94,23 @@ func (l *List) Add(task string) {
 // Mark the task as done
 func (l *List) Complete(i int) error {
 	// Check if List have tasks or not
-	if i <= 0 || i > len(*l) {
+	if i < 0 || i > len(*l) {
 		return fmt.Errorf("No tasks in the list %d", i)
 	}
 
-	(*l)[i-1].Done = true
-	(*l)[i-1].CompletedAt = time.Now()
+	(*l)[i].Done = true
+	(*l)[i].CompletedAt = time.Now()
 	return nil
-
 }
 
 // Delete a task
 func (l *List) Delete(i int) error {
 
-	if i <= 0 || i > len(*l) {
+	if i < 0 || i > len(*l) {
 		return fmt.Errorf("No tasks in the list %d", i)
 	}
 
-	*l = append((*l)[:i-1], (*l)[i:]...)
+	*l = append((*l)[:i], (*l)[i+1:]...)
 	return nil
 }
 

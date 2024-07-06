@@ -2,16 +2,18 @@ package main
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 )
 
 var (
 	binaryFile = "mytodo"
-	filename   = ".todo.json"
+	filename   = "test.json"
 )
 
 func TestMain(m *testing.M) {
@@ -19,13 +21,6 @@ func TestMain(m *testing.M) {
 
 	if runtime.GOOS == "windows" {
 		binaryFile += ".exe"
-	}
-
-	cmd := exec.Command("touch", filename)
-	lsErr := cmd.Run()
-	if lsErr != nil {
-		fmt.Println("THIS", lsErr)
-		os.Exit(1)
 	}
 
 	command := exec.Command("go", "build", "-o", binaryFile)
@@ -40,6 +35,7 @@ func TestMain(m *testing.M) {
 	result := m.Run()
 
 	fmt.Println("Cleaning up...")
+
 	os.Remove(binaryFile)
 	os.Remove(filename)
 
@@ -47,7 +43,9 @@ func TestMain(m *testing.M) {
 }
 
 func TestCLI(t *testing.T) {
-	task := "Go to the GYM"
+	task := "Code everyday."
+	task2 := "Make projects."
+
 	dir, dirErr := os.Getwd()
 	if dirErr != nil {
 		t.Fatal(dirErr)
@@ -56,11 +54,27 @@ func TestCLI(t *testing.T) {
 	cmdPath := filepath.Join(dir, binaryFile)
 
 	t.Run("Add new task", func(t *testing.T) {
-		cmd := exec.Command(cmdPath, "-task", task)
+		cmd := exec.Command(cmdPath, "-add", task)
 
 		err := cmd.Run()
 
 		if err != nil {
+			t.Fatal(err)
+		}
+	})
+
+	t.Run("Add a new task from STDIN", func(t *testing.T) {
+		cmd := exec.Command(cmdPath, "-add")
+		cmdStdIn, err := cmd.StdinPipe()
+
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		io.WriteString(cmdStdIn, task2)
+		cmdStdIn.Close()
+
+		if err := cmd.Run(); err != nil {
 			t.Fatal(err)
 		}
 	})
@@ -72,10 +86,33 @@ func TestCLI(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		expected := task + "\n"
+		expected := fmt.Sprintf("  0: %s\n  1: %s\n", task, task2)
 
-		if expected != string(output) {
-			t.Errorf("Expected %q , result is %s", expected, string(output))
+		result := strings.TrimSuffix(string(output), "\n")
+		if expected != result {
+			t.Errorf("Expected %q , result is %s", expected, result)
+		}
+
+	})
+
+	t.Run("Complete Task", func(t *testing.T) {
+		cmdComplete := exec.Command(cmdPath, "-complete=0")
+		errComplete := cmdComplete.Run()
+		if errComplete != nil {
+			t.Fatal(errComplete)
+		}
+
+		cmd := exec.Command(cmdPath, "-list")
+		output, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		expected := fmt.Sprintf("X 0: %s\n  1: %s\n", task, task2)
+
+		result := strings.TrimSuffix(string(output), "\n")
+		if expected != result {
+			t.Errorf("Expected %q , result is %s", expected, result)
 		}
 
 	})

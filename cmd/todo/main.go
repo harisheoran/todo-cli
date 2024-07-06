@@ -44,7 +44,15 @@ func main() {
 			log.Fatal(errGet)
 			os.Exit(1)
 		}
-		list.Add(task)
+
+		if len(task) > 0 {
+			for _, value := range task {
+				if len(value) != 0 {
+					list.Add(value)
+				}
+			}
+		}
+
 		err := list.Save(filename)
 		if err != nil {
 			log.Fatal(err)
@@ -76,7 +84,6 @@ func main() {
 		fmt.Println(verboseData)
 
 	default:
-		fmt.Fprintln(os.Stderr, "Invalid Options")
-		os.Exit(1)
+		fmt.Println("Add new task using: --add")
 	}
 }
